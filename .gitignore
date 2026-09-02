@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Local runtime state (never commit data)
+data/
+*.db
+*.sqlite3
+
+# Uploaded files (avatars/logos) — keep the folder structure only
+app/static/uploads/**
+!app/static/uploads/avatars/
+!app/static/uploads/avatars/.gitkeep
+!app/static/uploads/logos/
+!app/static/uploads/logos/.gitkeep

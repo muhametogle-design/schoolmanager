@@ -1,0 +1,11 @@
+# Runtime dependencies — NE-ES School Management System backend
+fastapi>=0.115
+python-multipart>=0.0.12
+SQLAlchemy>=2.0.30
+pydantic>=2.7
+uvicorn[standard]>=0.30
+
+# Development / QA tooling
+httpx>=0.27
+pytest>=8.2
+ruff>=0.6
