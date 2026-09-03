@@ -1,4 +1,6 @@
 """Student endpoints: list, create and retrieve student records."""
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -22,11 +24,11 @@ router = APIRouter(prefix="/students", tags=["Students"])
     summary="List students",
 )
 def students_list(
-    school_id: int | None = Query(
-        default=None, description="Filter by school ID (defaults to all schools)."
-    ),
-    db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_user),
+    school_id: Annotated[
+        int | None, Query(description="Filter by school ID (defaults to all schools).")
+    ],
+    db: Annotated[Session, Depends(get_db)],
+    _current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[StudentResponse]:
     """Return every student record, optionally filtered by ``school_id``."""
     students = list_students(db, school_id=school_id)
@@ -41,8 +43,8 @@ def students_list(
 )
 def students_create(
     payload: StudentCreate,
-    db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_user),
+    db: Annotated[Session, Depends(get_db)],
+    _current_user: Annotated[User, Depends(get_current_user)],
 ) -> StudentResponse:
     """Enrol a new student and return the created record.
 
@@ -66,8 +68,8 @@ def students_create(
 )
 def students_get(
     student_id: int,
-    db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_user),
+    db: Annotated[Session, Depends(get_db)],
+    _current_user: Annotated[User, Depends(get_current_user)],
 ) -> StudentResponse:
     """Return the student with the given ID (404 when not found)."""
     student = get_student(db, student_id)

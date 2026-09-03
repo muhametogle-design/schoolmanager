@@ -3,7 +3,7 @@ import base64
 import hashlib
 import hmac
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
@@ -58,7 +58,7 @@ def create_access_token(
     expires_delta: timedelta | None = None,
 ) -> str:
     """Create a signed JWT access token for the given user."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expire = now + (expires_delta or timedelta(minutes=settings.access_token_expire_minutes))
     payload: dict[str, Any] = {
         "sub": str(subject),
