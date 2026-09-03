@@ -1,16 +1,55 @@
-# React + Vite
+# NE-ES School Management — Web Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+React + Vite frontend for the NE-ES School Management System. It replaces the
+Vite starter UI with the dashboard that talks to the FastAPI backend
+(`app/` at the repo root).
 
-Currently, two official plugins are available:
+## Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+| Concern   | Choice                                          |
+| --------- | ----------------------------------------------- |
+| Framework | React 19 + Vite 8                                |
+| Routing   | `react-router-dom` v7                            |
+| HTTP      | `axios` — one configured instance in `src/api/client.js` |
+| Lint      | `oxlint` (`.oxlintrc.json`)                      |
 
-## React Compiler
+## Getting started
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+cp .env.example .env.local   # adjust VITE_API_BASE_URL if the API is elsewhere
+npm run dev                  # requires the backend on :8000 (see repo README)
+```
 
-## Expanding the Oxlint configuration
+`VITE_API_BASE_URL` is the only configuration the client needs — defaults to
+`http://127.0.0.1:8000/api/v1`. If the backend does not send CORS headers, set
+`VITE_API_BASE_URL=/api/v1` instead: `vite.config.js` proxies `/api/v1` and
+`/static` to `http://127.0.0.1:8000`, so the browser stays same-origin.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+## Layout
+
+```
+src/
+  api/client.js        axios instance: base URL, JWT request interceptor,
+                       401 → clear session + redirect, error + asset-URL helpers
+  components/Login.jsx     POST /auth/login, persists token in localStorage
+  components/Dashboard.jsx school registry grid (GET /management/schools)
+  components/Students.jsx  table + enrolment form + avatar uploads
+                           (POST/DELETE /management/students/{id}/avatar)
+  App.jsx                router, auth guard and dashboard layout (sidebar/topbar)
+  index.css              dashboard design system
+```
+
+## Auth model
+
+`POST /auth/login` returns `{access_token, expires_in, user}`. The token is
+stored under `localStorage` (`schoolmanager.accessToken`); every request made
+through `apiClient` gets an `Authorization: Bearer …` header automatically and
+any `401` from the API clears the session and redirects to `/login`.
+
+## QA
+
+```bash
+npm run lint    # oxlint
+npm run build   # production bundle
+```
