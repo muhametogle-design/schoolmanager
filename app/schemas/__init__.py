@@ -1,47 +1,42 @@
-"""Schema registry - every Pydantic schema is explicitly exported here.
+"""Pydantic v2 schemas.
 
-Keep these imports static and explicit: no dynamic loaders, pkgutil
-iteration or importlib tricks, which cause circular-import bugs.
-
-Import order matters only for readability: ``auth`` is imported first because
-``academics`` references ``UserInfo`` from it. Python resolves that through
-``sys.modules`` regardless, but this order keeps the graph obvious.
+Explicit static re-exports only (project architecture rule: no dynamic
+loading loops).
 """
-from app.schemas.academics import (
-    ClassCreate,
-    SchoolClassResponse,
-    SubjectCreate,
-    SubjectResponse,
+
+from app.schemas.common import EmailMixin, ORMModel
+from app.schemas.finance import (
+    FeeStructureCreate,
+    FeeStructureRead,
+    InvoiceBalance,
+    InvoiceCreate,
+    InvoiceRead,
+    PaymentCreate,
+    PaymentRead,
+    StudentBalance,
 )
-from app.schemas.auth import LoginRequest, TokenResponse, UserInfo, UserRole
 from app.schemas.management import (
-    PhotoUploadRequest,
-    SchoolResponse,
-    SchoolUiConfig,
-    UiConfigBase,
-    UiConfigUpdate,
+    SchoolCreate,
+    SchoolRead,
+    StudentCreate,
+    StudentRead,
+    StudentUpdate,
 )
-from app.schemas.student import StudentCreate, StudentResponse, StudentStatus
 
 __all__ = [
-    # auth
-    "LoginRequest",
-    "TokenResponse",
-    "UserInfo",
-    "UserRole",
-    # academics
-    "ClassCreate",
-    "SchoolClassResponse",
-    "SubjectCreate",
-    "SubjectResponse",
-    # student
+    "EmailMixin",
+    "FeeStructureCreate",
+    "FeeStructureRead",
+    "InvoiceBalance",
+    "InvoiceCreate",
+    "InvoiceRead",
+    "ORMModel",
+    "PaymentCreate",
+    "PaymentRead",
+    "SchoolCreate",
+    "SchoolRead",
+    "StudentBalance",
     "StudentCreate",
-    "StudentResponse",
-    "StudentStatus",
-    # management
-    "PhotoUploadRequest",
-    "SchoolResponse",
-    "SchoolUiConfig",
-    "UiConfigBase",
-    "UiConfigUpdate",
+    "StudentRead",
+    "StudentUpdate",
 ]

@@ -1,155 +1,113 @@
-"""Management endpoints: UI configuration (colors/branding) and photos."""
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
+"""Management API: schools, students, and avatar/logo uploads.
 
-from app.api.deps import get_current_user, get_optional_current_user
-from app.db.session import get_db
-from app.models.identity import User
+Upload endpoints accept ``multipart/form-data`` with a single ``file`` field.
+Raw bytes are handed to the service layer, which validates (magic bytes,
+size) and persists them under ``app/static/uploads/``.
+"""
+
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, File, Query, UploadFile
+
+from app.api.deps import ManagementServiceDep, StorageDep
 from app.schemas.management import (
-    PhotoUploadRequest,
-    SchoolResponse,
-    SchoolUiConfig,
-    UiConfigUpdate,
-)
-from app.services.management import (
-    get_active_school_ui_config,
-    get_school,
-    store_photo,
-    update_school_ui_config,
+    SchoolCreate,
+    SchoolRead,
+    StudentCreate,
+    StudentRead,
+    StudentUpdate,
 )
 
-router = APIRouter(prefix="/management", tags=["Management"])
+router = APIRouter(prefix="/management", tags=["management"])
+
+SchoolFile = Annotated[UploadFile, File(description="PNG/JPEG/WebP/GIF image upload")]
 
 
-# --------------------------------------------------------------------------
-# School UI configuration (colors & branding)
-# --------------------------------------------------------------------------
-@router.get(
-    "/settings",
-    response_model=SchoolUiConfig,
-    summary="Get the active school UI configuration",
-)
-def ui_config_get(
-    school_code: str | None = Query(
-        default=None,
-        description="Optional school code to resolve school-specific branding.",
-    ),
-    db: Session = Depends(get_db),
-    _current_user: User | None = Depends(get_optional_current_user),
-) -> SchoolUiConfig:
-    """Return the active branding/UI configuration.
-
-    The endpoint is public so the front-end can render branding before a
-    user signs in. When ``school_code`` is given, branding for that school is
-    preferred; otherwise the first active school configuration is returned.
-    """
-    ui_config = get_active_school_ui_config(db, school_code=school_code)
-    if ui_config is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No school UI configuration was found. Run the app once to seed it.",
-        )
-
-    school = ui_config.school if ui_config.school_id else None
-    if school is None and school_code:
-        school = get_school(db, school_code=school_code)
-    if school is None:
-        school = get_school(db)
-
-    response = SchoolUiConfig.model_validate(ui_config)
-    if school is not None:
-        response.school_id = school.id
-        response.school_name = school.name
-    return response
+async def _read_upload(file: UploadFile, limit_bytes: int) -> bytes:
+    """Read at most ``limit_bytes`` + 1 so oversize bodies are rejected early."""
+    try:
+        return await file.read(limit_bytes + 1)
+    finally:
+        await file.close()
 
 
-@router.put(
-    "/settings",
-    response_model=SchoolUiConfig,
-    summary="Update the school UI configuration",
-)
-def ui_config_update(
-    payload: UiConfigUpdate,
-    db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_user),
-) -> SchoolUiConfig:
-    """Partially update the school branding/UI configuration.
-
-    Only the fields present in the request body are changed; colour values
-    are validated as ``#RRGGBB`` hex codes by the schema.
-    """
-    ui_config = update_school_ui_config(db, payload)
-
-    school = ui_config.school if ui_config.school_id else None
-    if school is None:
-        school = get_school(db)
-    response = SchoolUiConfig.model_validate(ui_config)
-    if school is not None:
-        response.school_id = school.id
-        response.school_name = school.name
-    return response
+# -- schools ---------------------------------------------------------------
 
 
-@router.get(
-    "/settings/school",
-    response_model=SchoolResponse,
-    summary="Get school profile information",
-)
-def school_get(
-    school_code: str | None = Query(
-        default=None, description="Optional school code to look up."
-    ),
-    db: Session = Depends(get_db),
-    _current_user: User | None = Depends(get_optional_current_user),
-) -> SchoolResponse:
-    """Return the school profile matching ``school_code`` (or the first school)."""
-    school = get_school(db, school_code=school_code)
-    if school is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No school was found.",
-        )
-    return SchoolResponse.model_validate(school)
+@router.post("/schools", response_model=SchoolRead, status_code=201)
+def create_school(payload: SchoolCreate, service: ManagementServiceDep) -> SchoolRead:
+    return SchoolRead.model_validate(service.create_school(payload))
 
 
-# --------------------------------------------------------------------------
-# Photo handling (placeholder)
-# --------------------------------------------------------------------------
-@router.post(
-    "/settings/logo",
-    response_model=dict,
-    summary="Upload the school logo (placeholder)",
-)
-def school_logo_upload(
-    payload: PhotoUploadRequest,
-    db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_user),
-) -> dict:
-    """Upload the school logo (placeholder implementation).
-
-    The request body must contain a base64-encoded image. The endpoint
-    currently returns the target path without persisting the bytes - see
-    ``app.services.management.store_photo``.
-    """
-    if payload.photo_type != "logo":
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="This endpoint only accepts 'logo' photo_type values.",
-        )
-    path = store_photo(db, payload)
-    return {"status": "accepted", "photo_url": path, "message": "Placeholder: file not stored yet."}
+@router.get("/schools", response_model=list[SchoolRead])
+def list_schools(service: ManagementServiceDep) -> list[SchoolRead]:
+    return [SchoolRead.model_validate(school) for school in service.list_schools()]
 
 
-@router.post(
-    "/settings/photos",
-    response_model=dict,
-    summary="Upload a student/school photo (placeholder)",
-)
-def photo_upload(
-    payload: PhotoUploadRequest,
-    db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_user),
-) -> dict:
-    """Upload a photo (placeholder implementation)."""
-    path = store_photo(db, payload)
-    return {"status": "accepted", "photo_url": path, "message": "Placeholder: file not stored yet."}
+@router.get("/schools/{school_id}", response_model=SchoolRead)
+def get_school(school_id: int, service: ManagementServiceDep) -> SchoolRead:
+    return SchoolRead.model_validate(service.get_school(school_id))
+
+
+@router.post("/schools/{school_id}/logo", response_model=SchoolRead)
+async def upload_school_logo(
+    school_id: int,
+    file: SchoolFile,
+    service: ManagementServiceDep,
+    storage: StorageDep,
+) -> SchoolRead:
+    data = await _read_upload(file, storage.max_bytes)
+    school = service.set_school_logo(school_id, data=data, content_type=file.content_type)
+    return SchoolRead.model_validate(school)
+
+
+@router.delete("/schools/{school_id}/logo", response_model=SchoolRead)
+def remove_school_logo(school_id: int, service: ManagementServiceDep) -> SchoolRead:
+    return SchoolRead.model_validate(service.remove_school_logo(school_id))
+
+
+# -- students ----------------------------------------------------------------
+
+
+@router.post("/students", response_model=StudentRead, status_code=201)
+def create_student(payload: StudentCreate, service: ManagementServiceDep) -> StudentRead:
+    return StudentRead.model_validate(service.create_student(payload))
+
+
+@router.get("/students", response_model=list[StudentRead])
+def list_students(
+    service: ManagementServiceDep,
+    school_id: Annotated[int | None, Query(ge=1)] = None,
+) -> list[StudentRead]:
+    return [StudentRead.model_validate(s) for s in service.list_students(school_id)]
+
+
+@router.get("/students/{student_id}", response_model=StudentRead)
+def get_student(student_id: int, service: ManagementServiceDep) -> StudentRead:
+    return StudentRead.model_validate(service.get_student(student_id))
+
+
+@router.patch("/students/{student_id}", response_model=StudentRead)
+def update_student(
+    student_id: int, payload: StudentUpdate, service: ManagementServiceDep
+) -> StudentRead:
+    return StudentRead.model_validate(service.update_student(student_id, payload))
+
+
+@router.post("/students/{student_id}/avatar", response_model=StudentRead)
+async def upload_student_avatar(
+    student_id: int,
+    file: SchoolFile,
+    service: ManagementServiceDep,
+    storage: StorageDep,
+) -> StudentRead:
+    data = await _read_upload(file, storage.max_bytes)
+    student = service.set_student_avatar(student_id, data=data, content_type=file.content_type)
+    return StudentRead.model_validate(student)
+
+
+@router.delete("/students/{student_id}/avatar", response_model=StudentRead)
+def remove_student_avatar(student_id: int, service: ManagementServiceDep) -> StudentRead:
+    return StudentRead.model_validate(service.remove_student_avatar(student_id))

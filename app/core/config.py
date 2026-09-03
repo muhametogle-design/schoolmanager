@@ -1,51 +1,66 @@
-"""Application configuration loaded from environment variables / a .env file."""
+"""Application configuration for the NE-ES School Management System.
+
+Settings live in a single frozen dataclass so the rest of the codebase receives
+an explicit, typed configuration object. Environment variables prefixed with
+``SCHOOLMGR_`` override the defaults and are read once, in ``get_settings()``.
+Tests build their own :class:`Settings` instances pointing at temp
+directories, which keeps the production defaults untouched.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+APP_DIR = Path(__file__).resolve().parents[1]
+REPO_ROOT = APP_DIR.parent
 
-# Repository root: <root>/app/core/config.py -> three levels up.
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
+DEFAULT_APP_NAME = "NE-ES School Management System"
+DEFAULT_DATABASE_URL = f"sqlite:///{REPO_ROOT / 'data' / 'schoolmanager.db'}"
+DEFAULT_STATIC_ROOT = APP_DIR / "static"
+DEFAULT_MAX_UPLOAD_BYTES = 2 * 1024 * 1024  # 2 MiB per uploaded image
 
-
-class Settings(BaseSettings):
-    """Runtime settings. Every value can be overridden with an environment
-    variable of the same name (case-insensitive), e.g. ``DATABASE_URL``,
-    ``SECRET_KEY``, ``DEFAULT_ADMIN_PASSWORD``.
-    """
-
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-        extra="ignore",
-    )
-
-    # --- Application ---
-    app_name: str = "NE-ES School Management System"
-    app_version: str = "1.0.0"
-    debug: bool = False
-
-    # --- Database ---
-    # SQLite by default for a zero-config deployment. Point DATABASE_URL at a
-    # Postgres/MySQL server for production use.
-    database_url: str = f"sqlite:///{BASE_DIR / 'schoolmanager.db'}"
-
-    # --- Security ---
-    secret_key: str = "dev-only-secret-change-me-in-production"
-    token_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60 * 24
-
-    # --- Default seed data (used on first startup) ---
-    default_school_name: str = "NE-ES Academy"
-    default_admin_username: str = "admin"
-    default_admin_password: str = "admin123"
+#: Sub-directories under ``<static_root>/uploads`` that the storage service may
+#: write to. Kept as an explicit, static tuple (no discovery loops).
+UPLOAD_SUBDIRS: tuple[str, ...] = ("avatars", "logos")
 
 
-@lru_cache
+def _env(name: str) -> str | None:
+    raw = os.environ.get(name)
+    if raw is None:
+        return None
+    raw = raw.strip()
+    return raw or None
+
+
+@dataclass(frozen=True, slots=True)
+class Settings:
+    """Typed application settings (see module docstring for env overrides)."""
+
+    app_name: str = DEFAULT_APP_NAME
+    database_url: str = DEFAULT_DATABASE_URL
+    static_root: Path = DEFAULT_STATIC_ROOT
+    max_upload_bytes: int = DEFAULT_MAX_UPLOAD_BYTES
+    upload_subdirs: tuple[str, ...] = UPLOAD_SUBDIRS
+
+    @property
+    def uploads_root(self) -> Path:
+        """Root directory for stored uploads (served under ``/static``)."""
+        return self.static_root / "uploads"
+
+
+@lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    """Return the cached application settings instance."""
-    return Settings()
-
-
-settings = get_settings()
+    """Build settings from the environment once (cached)."""
+    overrides: dict[str, object] = {}
+    if raw := _env("SCHOOLMGR_APP_NAME"):
+        overrides["app_name"] = raw
+    if raw := _env("SCHOOLMGR_DATABASE_URL"):
+        overrides["database_url"] = raw
+    if raw := _env("SCHOOLMGR_STATIC_ROOT"):
+        overrides["static_root"] = Path(raw).expanduser()
+    if raw := _env("SCHOOLMGR_MAX_UPLOAD_BYTES"):
+        overrides["max_upload_bytes"] = int(raw)
+    return Settings(**overrides)

@@ -1,130 +1,78 @@
-"""Management-related Pydantic schemas (UI branding + photo uploads)."""
-import re
+"""Pydantic v2 schemas for the management module (schools, students, photos)."""
+
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import Field, computed_field, field_validator
 
-HEX_COLOR_PATTERN = re.compile(r"^#[0-9A-Fa-f]{6}$")
+from app.schemas.common import EmailMixin, ORMModel
+
+#: Public URL prefixes derived from the ``/static`` mount in ``app.main`` and
+#: the storage layout ``<static_root>/uploads/<subdir>/<filename>``.
+_AVATAR_URL_BASE = "/static/uploads/avatars"
+_LOGO_URL_BASE = "/static/uploads/logos"
 
 
-class UiConfigBase(BaseModel):
-    """Fields shared by school branding / UI configuration objects."""
+class SchoolCreate(EmailMixin):
+    name: str = Field(min_length=1, max_length=120)
+    code: str = Field(min_length=2, max_length=24)
+    address: str | None = Field(default=None, max_length=255)
 
-    school_name: str | None = Field(default=None, max_length=255)
-    primary_color: str | None = None
-    secondary_color: str | None = None
-    background_color: str | None = None
-    text_color: str | None = None
-    logo_url: str | None = Field(default=None, max_length=500)
-    custom_css: str | None = None
-    is_active: bool | int | None = None
-
-    @field_validator(
-        "primary_color",
-        "secondary_color",
-        "background_color",
-        "text_color",
-        mode="before",
-    )
+    @field_validator("code")
     @classmethod
-    def _normalize_color(cls, value: object) -> object:
-        """Normalise a colour to uppercase ``#RRGGBB`` and validate it."""
-        if value is None or value == "":
-            return None
-        color = str(value).strip().upper()
-        if not HEX_COLOR_PATTERN.match(color):
-            raise ValueError(
-                f"Invalid color '{value}'. Expected a hex value like '#2563EB'."
-            )
-        return color
+    def _normalise_code(cls, value: str) -> str:
+        return value.strip().upper()
 
 
-class SchoolUiConfig(BaseModel):
-    """UI configuration (colors & branding) as read by the front-end.
-
-    ``school_name`` mirrors the school's public name so the header/branding
-    can be rendered from a single object.
-    """
-
-    school_id: int | None = None
-    student_id: int | None = None
-    school_name: str | None = None
-    primary_color: str = "#2563EB"
-    secondary_color: str = "#F59E0B"
-    background_color: str = "#F3F4F6"
-    text_color: str = "#111827"
-    logo_url: str | None = None
-    custom_css: str | None = None
-    is_active: bool = True
-    updated_at: datetime | None = None
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class UiConfigUpdate(UiConfigBase):
-    """Partial update payload for the school UI configuration."""
-
-
-class PhotoUploadRequest(BaseModel):
-    """Payload for the (placeholder) student photo upload endpoint.
-
-    The ``photo`` is accepted as a base64-encoded data URI or a raw base64
-    string (``data:image/...;base64,...`` or bare base64). Validation only
-    checks the envelope; decoding/storage is handled by the service layer.
-    """
-
-    photo: str = Field(min_length=1, description="Base64 image data or data URI.")
-    photo_type: Literal["student", "logo"] = "student"
-    school_code: str | None = Field(
-        default=None,
-        max_length=20,
-        description="Used to resolve student-specific branding if provided.",
-    )
-    student_id: int | None = None
-
-    @field_validator("photo", mode="after")
-    @classmethod
-    def _validate_photo_payload(cls, value: str) -> str:
-        """Reject obviously non-image / non-base64 photo payloads early."""
-        data = value
-        if data.startswith("data:"):  # data URI -> strip the header
-            try:
-                header, payload = data.split(",", 1)
-            except ValueError as exc:  # pragma: no cover - defensive
-                raise ValueError("Malformed photo data URI.") from exc
-            if not header.startswith("data:image/"):
-                raise ValueError("Photo must be an image (data:image/...).")
-            data = payload
-        if not data or not re.fullmatch(r"[A-Za-z0-9+/=\s]+", data):
-            raise ValueError("Photo must be valid base64 data.")
-        return value
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "photo": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB...",
-                "photo_type": "student",
-                "school_code": "NEES",
-                "student_id": 1,
-            }
-        }
-    )
-
-
-class SchoolResponse(BaseModel):
-    """School record returned by the management endpoints."""
-
+class SchoolRead(ORMModel):
     id: int
     name: str
     code: str
-    address: str | None = None
-    phone: str | None = None
-    email: str | None = None
-    motto: str | None = None
-    logo_url: str | None = None
-    is_active: bool = True
+    email: str | None
+    address: str | None
+    logo_filename: str | None
     created_at: datetime
     updated_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    @computed_field
+    @property
+    def logo_url(self) -> str | None:
+        if not self.logo_filename:
+            return None
+        return f"{_LOGO_URL_BASE}/{self.logo_filename}"
+
+
+class StudentCreate(EmailMixin):
+    school_id: int = Field(ge=1)
+    first_name: str = Field(min_length=1, max_length=80)
+    last_name: str = Field(min_length=1, max_length=80)
+    grade_label: str | None = Field(default=None, max_length=32)
+
+
+class StudentUpdate(EmailMixin):
+    first_name: str | None = Field(default=None, min_length=1, max_length=80)
+    last_name: str | None = Field(default=None, min_length=1, max_length=80)
+    grade_label: str | None = Field(default=None, max_length=32)
+    is_active: bool | None = None
+
+
+class StudentRead(ORMModel):
+    id: int
+    school_id: int
+    first_name: str
+    last_name: str
+    full_name: str
+    email: str | None
+    grade_label: str | None
+    is_active: bool
+    avatar_filename: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    @computed_field
+    @property
+    def avatar_url(self) -> str | None:
+        if not self.avatar_filename:
+            return None
+        return f"{_AVATAR_URL_BASE}/{self.avatar_filename}"

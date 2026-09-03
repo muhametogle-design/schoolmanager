@@ -1,8 +1,10 @@
-"""API routers - all routers are explicitly registered here.
+"""API routers for the NE-ES School Management System.
 
-Registering routers with static imports keeps the module graph explicit and
-avoids the circular-import/registration bugs caused by dynamic loader loops.
+Explicit static imports only (project architecture rule: no dynamic loading
+loops). ``app.main`` wires the routers exported here.
 """
-from app.api import academics, auth, management, students
 
-__all__ = ["auth", "students", "academics", "management"]
+from app.api.finance import router as finance_router
+from app.api.management import router as management_router
+
+__all__ = ["finance_router", "management_router"]

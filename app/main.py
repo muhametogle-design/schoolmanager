@@ -1,56 +1,86 @@
-"""NE-ES School Management System - FastAPI application entry point.
+"""NE-ES School Management System — FastAPI entry point.
 
-Run in development::
+Wiring is deliberately explicit (project architecture rule: no dynamic router
+discovery): the routers exported by ``app.api`` are included here, uploads are
+served from a static mount backed by ``app/static/``, and service-layer
+errors are translated into JSON responses by one exception handler.
+
+Run locally with::
 
     uvicorn app.main:app --reload
-
-Deployment::
-
-    uvicorn app.main:app --host 0.0.0.0 --port 8000
 """
-from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from __future__ import annotations
 
-from app.api import academics, auth, management, students
-from app.core.config import settings
-from app.db.session import init_db
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
+from app import __version__
+from app.api import finance_router, management_router
+from app.core.config import Settings, get_settings
+from app.core.db import create_db_engine, make_session_factory
+from app.core.errors import ServiceError
+from app.models import Base
+from app.services.storage import FileStorageService
 
-@asynccontextmanager
-async def lifespan(_app: FastAPI):
-    """Create tables and seed the default school/admin on startup."""
-    init_db(seed=True)
-    yield
-
-
-app = FastAPI(
-    title=settings.app_name,
-    description=(
-        "REST API for the NE-ES School Management System: authentication, "
-        "student records, academic management (classes & subjects) and "
-        "school UI configuration."
-    ),
-    version=settings.app_version,
-    docs_url="/docs",
-    redoc_url="/redoc",
-    lifespan=lifespan,
-)
-
-# --- Router registration ----------------------------------------------------
-# Every router is registered with an explicit prefix and tag group so the
-# OpenAPI docs stay organised and imports stay static.
-app.include_router(auth.router)                 # /auth/*
-app.include_router(students.router)             # /students/*
-app.include_router(academics.router)            # /academics/*
-app.include_router(management.router)           # /management/*
+API_V1_PREFIX = "/api/v1"
 
 
-@app.get("/", tags=["Health"], summary="Health check")
-def health_check() -> dict[str, str]:
-    """Root health check endpoint."""
-    return {
-        "status": "ok",
-        "service": settings.app_name,
-        "version": settings.app_version,
-    }
+def create_app(settings: Settings | None = None) -> FastAPI:
+    """Application factory.
+
+    Tests call ``create_app(Settings(...))`` with temp-dir overrides so every
+    run gets an isolated database plus uploads directory without touching the
+    repo defaults.
+    """
+    settings = settings or get_settings()
+
+    app = FastAPI(
+        title=settings.app_name,
+        version=__version__,
+        description=(
+            "Backend for the NE-ES School Management System: student records "
+            "with photo uploads, plus finance & fees (fee structures, "
+            "invoices, payments, balances)."
+        ),
+    )
+
+    engine = create_db_engine(settings.database_url)
+    storage = FileStorageService(
+        settings.uploads_root,
+        max_bytes=settings.max_upload_bytes,
+        allowed_subdirs=settings.upload_subdirs,
+    )
+    app.state.settings = settings
+    app.state.engine = engine
+    app.state.session_factory = make_session_factory(engine)
+    app.state.storage = storage
+
+    # Uploads live inside the static tree so they are servable; create the
+    # directories before the StaticFiles mount validates them, then ensure the
+    # schema exists (no migration tool in this milestone).
+    storage.ensure_dirs()
+    Base.metadata.create_all(bind=engine)
+
+    @app.exception_handler(ServiceError)
+    async def handle_service_error(_request: Request, exc: ServiceError) -> JSONResponse:
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+    app.include_router(management_router, prefix=API_V1_PREFIX)
+    app.include_router(finance_router, prefix=API_V1_PREFIX)
+
+    app.mount(
+        "/static",
+        StaticFiles(directory=str(settings.static_root)),
+        name="static",
+    )
+
+    @app.get("/health", tags=["system"])
+    def health() -> dict[str, str]:
+        return {"status": "ok", "service": settings.app_name, "version": __version__}
+
+    return app
+
+
+app = create_app()
