@@ -1,5 +1,6 @@
 """Authentication endpoints: login and current-user profile."""
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -20,7 +21,7 @@ router = APIRouter(prefix="/auth", tags=["Auth"])
     response_model=TokenResponse,
     summary="Authenticate with username/email and password",
 )
-def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
+def login(payload: LoginRequest, db: Annotated[Session, Depends(get_db)]) -> TokenResponse:
     """Exchange valid credentials for a JWT access token.
 
     A 401 is returned for unknown users, wrong passwords and disabled
@@ -34,7 +35,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    user.last_login_at = datetime.now(timezone.utc)
+    user.last_login_at = datetime.now(UTC)
     db.commit()
     db.refresh(user)
 
@@ -53,6 +54,6 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse
     response_model=UserInfo,
     summary="Return the profile of the authenticated user",
 )
-def me(current_user: User = Depends(get_current_user)) -> UserInfo:
+def me(current_user: Annotated[User, Depends(get_current_user)]) -> UserInfo:
     """Return the profile of the currently authenticated user (token required)."""
     return UserInfo.model_validate(current_user)

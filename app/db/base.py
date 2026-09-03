@@ -1,12 +1,12 @@
 """SQLAlchemy declarative base shared by every ORM model."""
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import DeclarativeBase
 
 
 def utcnow() -> datetime:
     """Current UTC time; usable as a column default/onupdate callable."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class Base(DeclarativeBase):

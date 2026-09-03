@@ -41,7 +41,7 @@ def init_db(seed: bool = True) -> None:
     every model module has been loaded and registered on ``Base.metadata``
     before tables are created, without introducing import cycles at startup.
     """
-    import app.models as _models  # noqa: F401  - side-effect import: registers
+    import app.models as _models
     # every model on Base.metadata. The ``_ = ...`` reference keeps linters
     # from flagging the intentionally unused import.
     _ = _models

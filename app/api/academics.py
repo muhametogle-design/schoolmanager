@@ -1,4 +1,6 @@
 """Academic-management endpoints: school classes and subjects."""
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
@@ -31,11 +33,11 @@ router = APIRouter(prefix="/academics", tags=["Academics"])
     summary="List school classes",
 )
 def classes_list(
-    school_id: int | None = Query(
-        default=None, description="Filter by school ID (defaults to all schools)."
-    ),
-    db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_user),
+    school_id: Annotated[
+        int | None, Query(description="Filter by school ID (defaults to all schools).")
+    ],
+    db: Annotated[Session, Depends(get_db)],
+    _current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[SchoolClassResponse]:
     """Return every school class, with its teacher and student count."""
     classes = list_school_classes(db, school_id=school_id)
@@ -50,8 +52,8 @@ def classes_list(
 )
 def classes_create(
     payload: ClassCreate,
-    db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_user),
+    db: Annotated[Session, Depends(get_db)],
+    _current_user: Annotated[User, Depends(get_current_user)],
 ) -> SchoolClassResponse:
     """Create a new school class and return the stored record."""
     from app.models.academics import SchoolClass
@@ -71,8 +73,8 @@ def classes_create(
 )
 def classes_get(
     class_id: int,
-    db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_user),
+    db: Annotated[Session, Depends(get_db)],
+    _current_user: Annotated[User, Depends(get_current_user)],
 ) -> SchoolClassResponse:
     """Return the school class with the given ID (404 when not found)."""
     school_class = get_school_class(db, class_id)
@@ -93,11 +95,11 @@ def classes_get(
     summary="List subjects",
 )
 def subjects_list(
-    school_id: int | None = Query(
-        default=None, description="Filter by school ID (defaults to all schools)."
-    ),
-    db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_user),
+    school_id: Annotated[
+        int | None, Query(description="Filter by school ID (defaults to all schools).")
+    ],
+    db: Annotated[Session, Depends(get_db)],
+    _current_user: Annotated[User, Depends(get_current_user)],
 ) -> list[SubjectResponse]:
     """Return every subject (optionally filtered by ``school_id``)."""
     subjects = list_subjects(db, school_id=school_id)
@@ -112,8 +114,8 @@ def subjects_list(
 )
 def subjects_create(
     payload: SubjectCreate,
-    db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_user),
+    db: Annotated[Session, Depends(get_db)],
+    _current_user: Annotated[User, Depends(get_current_user)],
 ) -> SubjectResponse:
     """Create a new subject and return the stored record."""
     subject = create_subject(db, payload.model_dump())
@@ -127,8 +129,8 @@ def subjects_create(
 )
 def subjects_get(
     subject_id: int,
-    db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_user),
+    db: Annotated[Session, Depends(get_db)],
+    _current_user: Annotated[User, Depends(get_current_user)],
 ) -> SubjectResponse:
     """Return the subject with the given ID (404 when not found)."""
     subject = get_subject(db, subject_id)
